@@ -1,0 +1,54 @@
+---
+name: CI
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches:
+      - '**'
+    paths-ignore:
+      - "**.md"
+  schedule:
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+      - name: Install dependencies
+        run: mise dev:deps
+      - name: Run tests
+        run: mise dev:spec
+      - name: Run RuboCop
+        run: bin/rubocop
+
+  # Opt-in end-to-end canary: spins up a disposable OpenObserve, ingests a log line through
+  # the real REST API, searches it back, then destroys everything. Kept separate from the
+  # `test` job. The compose lifecycle (up/wait/down -v) belongs to the spec itself
+  # (spec/e2e/support/instance.rb); `mise run e2e` arms the suite via OPENOBSERVE_E2E.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+      - name: Install dependencies
+        run: mise dev:deps
+      - name: Run end-to-end canary
+        run: mise run e2e

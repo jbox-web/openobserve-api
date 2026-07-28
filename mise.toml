@@ -1,0 +1,91 @@
+[tools]
+java = "openjdk-25"
+ruby = "3.3"
+
+[vars]
+SPEC_OPTS = "{% if exec(command='(tty -s && echo true) || echo false') == 'true' %}--format documentation{% endif %}"
+
+[env]
+_JAVA_OPTIONS = "-DmaxYamlCodePoints=99999999"
+OPENOBSERVE_VERSION = "0.91.4"   # pinned OpenObserve release — bump deliberately
+OPENAPI_GENERATOR_VERSION = "7.24.0"   # pinned openapi-generator release (upstream ruby-nextgen generator)
+
+# --- Generation (machine) ---
+# `ruby-nextgen` generator: multi-instance Client.new(base_url:), Faraday, Zeitwerk,
+# namespaced sub-clients.
+# Nested moduleName + empty apiNamespace => OpenObserve::Api::Client + OpenObserve::Api::<Resource>.
+# Locally the generator comes from Homebrew (`brew install openapi-generator`); CI has no formula
+# and downloads the released jar, then points OPENAPI_GENERATOR_CMD at it. Both paths must resolve
+# the pinned version — the check below fails loudly instead of silently generating different code.
+#
+# The pinned spec is the server's own `/api-doc/openapi.json`, committed verbatim: it is never
+# patched, so the `regenerate` workflow compares against what the server actually publishes.
+# Consequence: sub-clients follow the URL segments, so every `/api/...` route lives under the
+# `api` sub-client (`client.api.alerts`), and the ten routes outside `/api` keep working.
+[tasks.generate]
+description = "Generate openobserve-api from the pinned OpenAPI spec"
+run = """
+set -eu
+gen="${OPENAPI_GENERATOR_CMD:-openapi-generator}"
+found="$($gen version)"
+if [ "$found" != "$OPENAPI_GENERATOR_VERSION" ]; then
+  echo "openapi-generator $found found, but $OPENAPI_GENERATOR_VERSION is pinned in mise.toml" >&2
+  exit 1
+fi
+# purge the generated code (lib/** + generated specs). Preserves spec/e2e (hand-maintained,
+# cf. .openapi-generator-ignore) and the protected files (README, mise.toml, .github, ...).
+rm -rf lib spec/api spec/models spec/spec_helper.rb
+$gen generate \
+  -i versions/openobserve-rest.v$OPENOBSERVE_VERSION.json \
+  -g ruby-nextgen -o . \
+  --skip-validate-spec \
+  --additional-properties "gemName=openobserve-api,moduleName=OpenObserve::Api,apiNamespace=,gemVersion=0.1.0,gemLicense=MIT,gemAuthor=jbox-web,gemHomepage=https://github.com/jbox-web/openobserve-api,gemSummary=Low-level REST client for the OpenObserve API,gemDescription=Generated low-level REST transport for the OpenObserve API"
+# The generator writes bin/* without the exec bit. Git would carry the mode once committed, but
+# restore it here so a fresh generation is runnable before any commit exists.
+chmod +x bin/rspec bin/rubocop
+"""
+
+# Unlike dolibarr-api, this task is NOT a no-op: on this spec the generator emits one
+# Style/IfUnlessModifier offense in lib/openobserve-api/configuration.rb. Autocorrecting it here
+# keeps `bin/rubocop` at zero offenses, so a real offense is never lost in known noise.
+# `build` = generate + format, so the regeneration idempotency check still holds.
+[tasks.format]
+description = "Autocorrect the generated code with RuboCop"
+run = "bundle exec rubocop -A lib"
+
+[tasks.build]
+description = "Generate + format"
+run = '''
+mise run generate
+mise run format
+'''
+
+# --- Development ---
+[tasks."dev:deps"]
+description = "Install dependencies"
+run = "bundle install"
+
+[tasks."dev:spec"]
+description = "Run the spec suite"
+run = "bundle exec rspec {{vars.SPEC_OPTS}}"
+
+# e2e canary — opt-in only. Spins up a disposable OpenObserve (docker-compose.e2e.yml),
+# ingests a log line and searches it back through the real REST API, then tears it down.
+# OPENOBSERVE_E2E arms the suite (the generated spec_helper can't exclude :e2e, so the spec
+# self-gates on this var); the instance lifecycle is owned by spec/e2e/support/instance.rb
+# (before/after :all). The trap is a backstop if the run is interrupted mid-flight.
+[tasks.e2e]
+description = "Run the e2e canary against a disposable dockerized OpenObserve"
+run = """
+export OPENOBSERVE_E2E=1
+trap 'docker compose -f docker-compose.e2e.yml down -v >/dev/null 2>&1 || true' EXIT
+bundle exec rspec spec/e2e
+"""
+
+[tasks."dev:docs"]
+description = "Generate YARD API documentation into ./doc"
+# yard is not part of the generated Gemfile (kept lean); install it on demand.
+run = """
+gem list -i yard >/dev/null 2>&1 || gem install --no-document yard
+yard doc 'lib/**/*.rb'
+"""

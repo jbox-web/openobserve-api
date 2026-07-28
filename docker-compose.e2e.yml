@@ -1,0 +1,35 @@
+# Disposable OpenObserve 0.91.4 for the end-to-end canary. Everything here is throwaway:
+# an ephemeral named volume (removed by `docker compose down -v`), test-only credentials,
+# and a loopback-only high port. NEVER point these tests at a real instance — the e2e
+# canary writes (it ingests into a stream). Driven by `mise run e2e`.
+#
+# OpenObserve ships as a single binary with an embedded store, so there is no companion
+# database service: the whole fixture is this one container.
+#
+# No compose healthcheck on purpose: the image carries no shell utilities to probe itself
+# with. Readiness is polled from the host against /healthz by spec/e2e/support/instance.rb,
+# which owns the lifecycle anyway.
+#
+# Port 7005: distinct from the dev stack (7001) and the dolibarr e2e stacks (7002, 7003)
+# so they can all run locally at once.
+name: openobserve-api-e2e
+
+services:
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.91.4
+    environment:
+      ZO_ROOT_USER_EMAIL: root@example.com
+      ZO_ROOT_USER_PASSWORD: Complexpass#123
+      ZO_DATA_DIR: /data
+    ports:
+      - '127.0.0.1:7005:5080'
+    volumes:
+      - data:/data
+    networks:
+      - e2e
+
+volumes:
+  data:
+
+networks:
+  e2e:

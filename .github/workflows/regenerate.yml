@@ -1,0 +1,42 @@
+---
+name: regenerate
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"   # weekly — detects drift between the pinned spec and the generated code
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+      # No Homebrew formula on the runner: fetch the released jar from Maven Central
+      # and point the mise task at it. The version is pinned in mise.toml, which the
+      # `generate` task cross-checks against whatever generator it ends up running.
+      - name: Fetch openapi-generator jar
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^OPENAPI_GENERATOR_VERSION = "\([^"]*\)".*/\1/p' mise.toml)"
+          curl -sSf --max-time 120 -o /tmp/openapi-generator-cli.jar \
+            "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/${version}/openapi-generator-cli-${version}.jar"
+          echo "OPENAPI_GENERATOR_CMD=java -jar /tmp/openapi-generator-cli.jar" >> "$GITHUB_ENV"
+      # Dependencies come BEFORE the build here, unlike dolibarr-api: `mise run format` shells
+      # out to `bundle exec rubocop -A lib`, which needs the bundle installed. See CLAUDE.md.
+      - name: Install dependencies
+        run: mise dev:deps
+      - name: Regenerate
+        run: mise run build
+      - name: Run tests
+        run: mise dev:spec
+      - name: Run RuboCop
+        run: bin/rubocop
+      - name: Fail if regeneration changed committed files
+        run: git diff --exit-code -- lib spec/api spec/models

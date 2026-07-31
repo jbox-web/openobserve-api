@@ -18,6 +18,14 @@ OPENAPI_GENERATOR_VERSION = "7.24.0"   # pinned openapi-generator release (upstr
 # and downloads the released jar, then points OPENAPI_GENERATOR_CMD at it. Both paths must resolve
 # the pinned version — the check below fails loudly instead of silently generating different code.
 #
+# `-t templates/ruby-nextgen` overrides three templates and only those: the generator falls back
+# to the ones embedded in the pinned jar for every file the directory does not hold. They carry
+# the `ssl` configuration option, without which a server behind a private CA — step-ca here — is
+# unreachable: the default trust store knows public authorities only, and no middleware can make
+# up for it since Faraday settles TLS when it builds the connection. Upstreamed as
+# OpenAPITools/openapi-generator#24536; delete this directory and the -t flag once a release
+# carrying it lands and OPENAPI_GENERATOR_VERSION is bumped to it.
+#
 # The pinned spec is the server's own `/api-doc/openapi.json`, committed verbatim: it is never
 # patched, so the `regenerate` workflow compares against what the server actually publishes.
 # Consequence: sub-clients follow the URL segments, so every `/api/...` route lives under the
@@ -38,6 +46,7 @@ rm -rf lib spec/api spec/models spec/spec_helper.rb
 $gen generate \
   -i versions/openobserve-rest.v$OPENOBSERVE_VERSION.json \
   -g ruby-nextgen -o . \
+  -t templates/ruby-nextgen \
   --skip-validate-spec \
   --additional-properties "gemName=openobserve-api,moduleName=OpenObserve::Api,apiNamespace=,gemVersion=0.1.0,gemLicense=MIT,gemAuthor=jbox-web,gemHomepage=https://github.com/jbox-web/openobserve-api,gemSummary=Low-level REST client for the OpenObserve API,gemDescription=Generated low-level REST transport for the OpenObserve API"
 # The generator writes bin/* without the exec bit. Git would carry the mode once committed, but

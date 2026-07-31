@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-module OpenObserve::Api
+module {{moduleName}}
   class Configuration
     # `ssl` is handed to Faraday verbatim, e.g. `{ ca_file: "/path/to/root.crt" }` for a server
     # whose certificate is issued by a private CA. Such a server is otherwise unreachable — the
     # default trust store holds public authorities only — and no middleware can make up for it:
     # TLS is settled when the connection is built, before any middleware runs.
-    attr_accessor :base_url, :timeout, :logger, :debugging, :query_array_encoding, :ssl, :api_key, :username, :password
+    attr_accessor :base_url, :timeout, :logger, :debugging, :query_array_encoding, :ssl{{#authMethods}}{{#isApiKey}}, :api_key{{/isApiKey}}{{#isBasicBearer}}, :access_token{{/isBasicBearer}}{{#isBasicBasic}}, :username, :password{{/isBasicBasic}}{{/authMethods}}
 
     def initialize(base_url: nil, **options)
-      @base_url = base_url || 'http://localhost'
+      @base_url = base_url || '{{{basePath}}}'
       @timeout = 60
       @query_array_encoding = :repeat
       @debugging = false
@@ -49,8 +49,29 @@ module OpenObserve::Api
     # per-request auth interface (Connection#call); a given generated client may exercise
     # only some of them (e.g. no query-based key, or no auth method at all).
     def apply_auth(headers, query, auth_names)
-      headers['Authorization'] = api_key if api_key && auth_names.include?('Authorization')
-      headers['Authorization'] = Faraday::Utils.basic_header_from(username, password) if username && auth_names.include?('BasicAuth')
+{{#authMethods}}
+{{#isApiKey}}
+{{#isKeyInHeader}}
+      headers['{{keyParamName}}'] = api_key if api_key && auth_names.include?('{{name}}')
+{{/isKeyInHeader}}
+{{#isKeyInQuery}}
+      query['{{keyParamName}}'] = api_key if api_key && auth_names.include?('{{name}}')
+{{/isKeyInQuery}}
+{{#isKeyInCookie}}
+      if api_key && auth_names.include?('{{name}}')
+        headers['Cookie'] = [headers['Cookie'], "{{keyParamName}}=#{api_key}"].compact.join('; ')
+      end
+{{/isKeyInCookie}}
+{{/isApiKey}}
+{{#isBasicBearer}}
+      headers['Authorization'] = "Bearer #{access_token}" if access_token && auth_names.include?('{{name}}')
+{{/isBasicBearer}}
+{{#isBasicBasic}}
+      if username && auth_names.include?('{{name}}')
+        headers['Authorization'] = Faraday::Utils.basic_header_from(username, password)
+      end
+{{/isBasicBasic}}
+{{/authMethods}}
       nil
     end
     # rubocop:enable Lint/UnusedMethodArgument

@@ -11,5 +11,6 @@ CLAUDE.md
 .github/**
 .gitignore
 # e2e canary: disposable Docker instance, writes for real (not generated)
+templates/**
 spec/e2e/**
 docker-compose.e2e.yml

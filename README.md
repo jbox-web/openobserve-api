@@ -11,8 +11,8 @@ OpenAPI spec. A generic gem with no business logic: multi-instance,
 [Faraday](https://github.com/lostisland/faraday), [Zeitwerk](https://github.com/fxn/zeitwerk),
 per-resource namespaced sub-clients.
 
-- Verified target: **OpenObserve 0.91.4** (OpenAPI 3.1.0, 150 paths, 261 schemas, 33 tags).
-- Pinned and committed spec: [`versions/openobserve-rest.v0.91.4.json`](versions/openobserve-rest.v0.91.4.json),
+- Verified target: **OpenObserve 0.91.5** (OpenAPI 3.1.0, 150 paths, 261 schemas, 33 tags).
+- Pinned and committed spec: [`versions/openobserve-rest.v0.91.5.json`](versions/openobserve-rest.v0.91.5.json),
   served by the instance itself on `/api-doc/openapi.json` (Swagger UI on `/swagger`, gated by
   `ZO_SWAGGER_ENABLED`, which defaults to `true`).
 

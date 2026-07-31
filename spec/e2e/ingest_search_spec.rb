@@ -3,7 +3,7 @@
 require 'spec_helper'
 require_relative 'support/instance'
 
-# Ingest-then-search round-trip against a disposable dockerized OpenObserve 0.91.4.
+# Ingest-then-search round-trip against a disposable dockerized OpenObserve 0.91.5.
 #
 # This is the e2e canary: it proves the real HTTP transport end to end — Authorization-header
 # auth, POST ingestion, POST search, and model serialization — against a live REST API. It

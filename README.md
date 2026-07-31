@@ -75,6 +75,29 @@ spec — they are dead options here.
 The server does expect HTTP Basic. Build the header value yourself and hand it to `api_key:`,
 as above. A long-lived token works the same way — it is the raw header value either way.
 
+### TLS behind a private CA — `ssl:`
+
+An OpenObserve served by a private authority (step-ca in a container stack, for instance) is
+unreachable out of the box: the default trust store holds public authorities only, and every
+request dies on `certificate verify failed (unable to get local issuer certificate)`.
+
+`ssl` is handed to Faraday verbatim, so anything the adapter understands works:
+
+```ruby
+client = OpenObserve::Api::Client.new(
+  base_url: "https://openobserve.internal:8443",
+  api_key:  "Basic #{["#{user}:#{password}"].pack('m0')}",
+  ssl:      { ca_file: "/path/to/root.crt" }
+)
+```
+
+It cannot be supplied any other way — `Configuration#use` appends middlewares, and Faraday
+settles TLS as it builds the connection, before any middleware runs.
+
+The option comes from the `ruby-nextgen` templates, upstreamed as
+[openapi-generator#24536](https://github.com/OpenAPITools/openapi-generator/pull/24536) and
+overridden locally under `templates/` until a release carries it — see [Regeneration](#regeneration).
+
 ### Sub-client shape — mind the `api` hop
 
 Sub-clients follow the **URL segments**, not the OpenAPI tags. Every OpenObserve route lives
@@ -160,6 +183,14 @@ mise run dev:spec   # spec suite
 > pinned by `OPENAPI_GENERATOR_VERSION` in [`mise.toml`](mise.toml) and cross-checked by the
 > `generate` task. Install it locally with `brew install openapi-generator`; CI downloads the
 > released jar — see [`.github/workflows/regenerate.yml`](.github/workflows/regenerate.yml).
+
+> **Template override — temporary.** `generate` passes `-t templates/ruby-nextgen`, which holds
+> three templates and only those; the generator falls back to the ones embedded in the pinned jar
+> for every other file, so the pinned version still produces all the rest. They add the `ssl`
+> configuration option, without which an OpenObserve behind a private CA is unreachable.
+> Upstreamed as [openapi-generator#24536](https://github.com/OpenAPITools/openapi-generator/pull/24536):
+> once a release carries it, bump `OPENAPI_GENERATOR_VERSION`, delete `templates/` and drop the
+> `-t` flag.
 
 Unlike a fully clean generation, this spec makes the generator emit **one** autocorrectable
 RuboCop offense, so `mise run format` is not a no-op here: it runs `bundle exec rubocop -A lib`,
